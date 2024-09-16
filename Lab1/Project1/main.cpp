@@ -9,16 +9,15 @@
 
 using namespace Gdiplus;
 
-typedef struct {
-    float x, y;  // Позиция
-    float angle; // Угол поворота (в радианах)
-} Sprite;
+
 
 // Глобальные переменные для GDI+
-int spriteX = 0;  // Координаты спрайта по оси X
-int spriteY = 0;  // Координаты спрайта по оси Y
-bool isDragging;
-
+float spriteX = 0.0f;  // Координаты спрайта по оси X
+float spriteY = 0.0f;  // Координаты спрайта по оси Y
+float spriteAng = 0.0f;
+bool isDragging = false;  // Флаг, указывающий, что мы перетаскиваем спрайт
+float offsetX = 0.0f;     // Смещение по оси X между курсором и центром спрайта
+float offsetY = 0.0f;     // Смещение по оси Y между курсором и центром спрайта
 
 Image* spriteImage = NULL;
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
@@ -26,69 +25,87 @@ LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 
 void CreateAcceleratorTable(HACCEL* hAccel) {
     ACCEL accelTable[] = {
-        { FVIRTKEY | FSHIFT, 'r',ID_ACCEL_TURN_RIGHT },  
-        { FVIRTKEY | FSHIFT, 'l',ID_ACCEL_TURN_LEFT },
+        { FVIRTKEY | FSHIFT, 'R',ID_ACCEL_TURN_RIGHT },  
+        { FVIRTKEY | FSHIFT, 'L',ID_ACCEL_TURN_LEFT },
     };
 
     *hAccel = CreateAcceleratorTable(accelTable, sizeof(accelTable) / sizeof(ACCEL));
+    if (*hAccel == NULL) {
+        OutputDebugString(L"Debug message: *hAccel == NULL!\n");
+    }
 }
 
 void DrawSpriteImage(HDC hdc, int x, int y) {
     if (spriteImage) {
         Graphics graphics(hdc);
-        graphics.DrawImage(spriteImage, x, y, spriteImage->GetWidth(), spriteImage->GetHeight());
+        // Получаем размеры спрайта
+        int spriteWidth = spriteImage->GetWidth();
+        int spriteHeight = spriteImage->GetHeight();
+
+        // Определяем центр спрайта
+        PointF center(spriteX + spriteWidth / 2.0f, spriteY + spriteHeight / 2.0f);
+
+        // Создаем матрицу трансформации
+        Matrix matrix;
+        matrix.RotateAt(spriteAng * 180 / PI, center); // Поворот по центру спрайта
+        graphics.SetTransform(&matrix);
+
+        // Отрисовываем изображение с учётом трансформации
+        graphics.DrawImage(spriteImage,(int) spriteX,(int) spriteY, spriteWidth, spriteHeight);
     }
 }
 
 
+bool IsSpriteInWindowBounds(int windowWidth, int windowHeight, float x, float y, float ang) {
+    if (!spriteImage) return true; 
+
+    float halfWidth = spriteImage->GetWidth() / 2.0f;
+    float halfHeight = spriteImage->GetHeight() / 2.0f;
+
+    float centerX = x + halfWidth;
+    float centerY = y + halfHeight;
+
+    PointF corners[4] = {
+        { x, y },                             
+        { x + spriteImage->GetWidth(), y },   
+        { x, y + spriteImage->GetHeight() },  
+        { x + spriteImage->GetWidth(), y + spriteImage->GetHeight() }  
+    };
+
+    float s = sin(ang);
+    float c = cos(ang);
+
+    for (int i = 0; i < 4; i++) {
+        float dx = corners[i].X - centerX;
+        float dy = corners[i].Y - centerY;
 
 
-// Функция для умножения 2D-координат на матрицу поворота
-void RotatePoint(float* x, float* y, float angle) {
-    float s = sin(angle);
-    float c = cos(angle);
+        float rotatedX = dx * c - dy * s + centerX;
+        float rotatedY = dx * s + dy * c + centerY;
 
-    // Поворот точки (x, y) вокруг начала координат
-    float newX = *x * c - *y * s;
-    float newY = *x * s + *y * c;
 
-    *x = newX;
-    *y = newY;
-}
+        if (rotatedX < 0 || rotatedX > windowWidth || rotatedY < 0 || rotatedY > windowHeight) {
+            return false; 
+        }
+    }
 
-// Функция для применения трансформации (движение и поворот)
-void ApplyTransformation(Sprite* sprite, float dx, float dy, float dAngle) {
-    // Поворот
-    sprite->angle += dAngle;
-
-    // Применяем движение с учётом текущего поворота
-    RotatePoint(&dx, &dy, sprite->angle);
-
-    // Перемещение
-    sprite->x += dx;
-    sprite->y += dy;
+    return true;  
 }
 
 // Функция для обработки нажатий клавиш
 void HandleKeyPress(WPARAM wParam, HWND hwnd)
 {
-    int step = 10;
+    RECT rect;
+    GetClientRect(hwnd, &rect);
+    int step = 5;
+    float newSpriteX = spriteX, newSpriteY = spriteY;
     switch (wParam)
     {
-        //TODO: add turning
-        case WM_COMMAND:
-            switch (LOWORD(wParam)) {
-                case ID_ACCEL_TURN_RIGHT:
-                    break;
-                case ID_ACCEL_TURN_LEFT:
-                    break;
-            }
-            break;
         case VK_UP:
         case 'W': {
             HKL layout = GetKeyboardLayout(0);
             if (LOWORD(layout) == MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US)) {
-                spriteY -= step;
+                newSpriteY = spriteY - step;
             }
             break;
         }
@@ -96,7 +113,7 @@ void HandleKeyPress(WPARAM wParam, HWND hwnd)
         case 'A': {
             HKL layout = GetKeyboardLayout(0);
             if (LOWORD(layout) == MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US)) {
-                spriteX -= step;
+                newSpriteX = spriteX - step;
             }
             break;
         }
@@ -104,7 +121,7 @@ void HandleKeyPress(WPARAM wParam, HWND hwnd)
         case 'S': {
             HKL layout = GetKeyboardLayout(0);
             if (LOWORD(layout) == MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US)) {
-                spriteY += step;
+                newSpriteY=spriteY + step;
             }
             break;
         }
@@ -112,7 +129,7 @@ void HandleKeyPress(WPARAM wParam, HWND hwnd)
         case 'D': {
             HKL layout = GetKeyboardLayout(0);
             if (LOWORD(layout) == MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US)) {
-                spriteX += step;
+                newSpriteX = spriteX + step;
             }
             break;
         }
@@ -125,16 +142,15 @@ void HandleKeyPress(WPARAM wParam, HWND hwnd)
         }
 
     }
+    if (IsSpriteInWindowBounds(rect.right, rect.bottom, newSpriteX, newSpriteY,spriteAng)) {
+        spriteX = newSpriteX;
+        spriteY = newSpriteY;
+    }
 
-
-    // Ограничение движений по границам окна (например, чтобы не выходить за границы экрана)
-    if (spriteX < 0) spriteX = 0;
-    if (spriteY < 0) spriteY = 0;
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
-    // Инициализация GDI+
     ULONG_PTR gdiplusToken;
     GdiplusStartupInput gdiplusStartupInput;
     GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
@@ -161,8 +177,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     ShowWindow(hWnd, nCmdShow);
     UpdateWindow(hWnd);
 
-    HACCEL hAccel;
+    HACCEL hAccel= NULL;
     CreateAcceleratorTable(&hAccel);
+
 
     spriteImage = new Image(L"\\\\Mac\\Home\\Documents\\SystemsProgramming\\Lab1\\Project1\\ARM64\\Debug\\Sprite.png");
     
@@ -182,26 +199,36 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     return (int)msg.wParam;
 }
 
-// Оконная процедура
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     static HDC hdcMem;
     static HBITMAP hbmMem;
     static HANDLE hOld;
 
+    float newAng = spriteAng;
+    float newSpriteX = spriteX, newSpriteY = spriteY;
     switch (msg)
     {
-    case WM_COMMAND:
+    case WM_COMMAND: {
+        RECT rect;
+        GetClientRect(hwnd, &rect);
         switch (LOWORD(wParam)) {
-            case ID_ACCEL_TURN_RIGHT:
+        case ID_ACCEL_TURN_RIGHT:
+            newAng = spriteAng + 0.1f;
             break;
-            case ID_ACCEL_TURN_LEFT:
+        case ID_ACCEL_TURN_LEFT:
+            newAng = spriteAng - 0.1f;
             break;
         }
+        if (IsSpriteInWindowBounds(rect.right, rect.bottom, spriteX, spriteY, newAng)) {
+            spriteAng = newAng;
+            InvalidateRect(hwnd, NULL, TRUE);
+        }
         break;
+    }
 
     case WM_CREATE: {
-        // Инициализация буферизации
         HDC hdc = GetDC(hwnd);
         hdcMem = CreateCompatibleDC(hdc);
         RECT rect;
@@ -213,64 +240,86 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         ReleaseDC(hwnd, hdc);
         break;
     }
- /*   case WM_LBUTTONDOWN: {
-        // Получаем координаты курсора
+    case WM_LBUTTONDOWN: {
+        SetCapture(hwnd);
         int mouseX = LOWORD(lParam);
         int mouseY = HIWORD(lParam);
 
-        // Проверяем, кликнули ли мы по спрайту
-        if (mouseX >= spriteX - spriteSize / 2 && mouseX <= spriteX + spriteSize / 2 &&
-            mouseY >= spriteY - spriteSize / 2 && mouseY <= spriteY + spriteSize / 2) {
-            isDragging = true;  // Начинаем перетаскивание
-            // Вычисляем смещение между курсором и центром спрайта
-            offsetX = mouseX - spriteX;
-            offsetY = mouseY - spriteY;
+        int spriteWidth = spriteImage->GetWidth();
+        int spriteHeight = spriteImage->GetHeight();
+
+        float centerX = spriteX + spriteWidth / 2.0f;
+        float centerY = spriteY + spriteHeight / 2.0f;
+
+        float dx = mouseX - centerX;
+        float dy = mouseY - centerY;
+
+        float s = sin(-spriteAng);  
+        float c = cos(-spriteAng);
+
+        float rotatedX = dx * c - dy * s + centerX;
+        float rotatedY = dx * s + dy * c + centerY;
+
+        if (rotatedX >= spriteX && rotatedX <= spriteX + spriteWidth &&
+            rotatedY >= spriteY && rotatedY <= spriteY + spriteHeight) {
+            isDragging = true;  
+            offsetX = rotatedX - spriteX;
+            offsetY = rotatedY - spriteY;
         }
     } break;
 
+
     case WM_MOUSEMOVE: {
+        RECT rect;
+        GetClientRect(hwnd, &rect);
         if (isDragging) {
-            // Получаем координаты курсора и обновляем положение спрайта
+
             int mouseX = LOWORD(lParam);
             int mouseY = HIWORD(lParam);
 
-            spriteX = mouseX - offsetX;
-            spriteY = mouseY - offsetY;
-
-            // Перерисовываем окно для обновления позиции спрайта
-            InvalidateRect(hwnd, NULL, TRUE);
+            newSpriteX = mouseX - offsetX;
+            newSpriteY = mouseY - offsetY;
+            if (IsSpriteInWindowBounds(rect.right, rect.bottom, newSpriteX, newSpriteY, newAng)) {
+                spriteX = newSpriteX;
+                spriteY = newSpriteY;
+                InvalidateRect(hwnd, NULL, TRUE);
+            }
         }
     } break;
 
     case WM_LBUTTONUP: {
-        // Завершаем перетаскивание
         isDragging = false;
+        ReleaseCapture();
     } break;
-*/
+
     case WM_MOUSEWHEEL: {
+
+        RECT rect;
+        GetClientRect(hwnd, &rect);
         int zDelta = GET_WHEEL_DELTA_WPARAM(wParam);
-        //TODO make shure that Alt key pressed not Win or Ctrl
-        // Проверяем, удерживается ли клавиша Alt
         if (GetKeyState(VK_MENU) & 0x8000) {
             if (zDelta > 0) {
-                spriteX += 1;
+                newSpriteX = spriteX + 1;
             }
             else if (zDelta < 0) {
-                spriteX -= 1;
+                newSpriteX = spriteX - 1;
             }
 
         }
         else {
             if (zDelta > 0) {
-                spriteY += 1;
+                newSpriteY = spriteY + 1;
             }
             else if (zDelta < 0) {
-                spriteY -= 1;
+                newSpriteY = spriteY - 1;
             }
         }
-        if (spriteX < 0) spriteX = 0;
-        if (spriteY < 0) spriteY = 0;
-        InvalidateRect(hwnd, NULL, TRUE);
+        if (IsSpriteInWindowBounds(rect.right, rect.bottom, newSpriteX, newSpriteY, newAng)) {
+            spriteX = newSpriteX;
+            spriteY = newSpriteY;
+            InvalidateRect(hwnd, NULL, TRUE);
+        }
+        
         break;
     }
 
@@ -278,22 +327,18 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
 
-        // Очищаем буфер памяти
         RECT rect;
         GetClientRect(hwnd, &rect);
         FillRect(hdcMem, &rect, (HBRUSH)(COLOR_WINDOW + 1));
 
-        // Отрисовываем изображение в буфере памяти
         DrawSpriteImage(hdcMem, spriteX, spriteY);
 
-        // Копируем содержимое буфера на экран
         BitBlt(hdc, 0, 0, rect.right, rect.bottom, hdcMem, 0, 0, SRCCOPY);
 
         EndPaint(hwnd, &ps);
         break;
     }
     case WM_SIZE: {
-        // Обновляем размер буфера при изменении размера окна
         HDC hdc = GetDC(hwnd);
         if (hbmMem) {
             DeleteObject(hbmMem);
@@ -307,15 +352,23 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
 
     case WM_KEYDOWN:
-        // Обработка нажатий клавиш
         HandleKeyPress(wParam, hwnd);
-        // Перерисовка окна после изменения позиции спрайта
+
         InvalidateRect(hwnd, NULL, TRUE);
         break;
 
-    case WM_DESTROY:
+    case WM_DESTROY: {
+        if (hbmMem) {
+            DeleteObject(hbmMem);           
+        }
+
+        if (hdcMem) {
+            DeleteDC(hdcMem);        
+        }
+
         PostQuitMessage(0);
-        break;
+    } break;
+
 
     default:
         return DefWindowProc(hwnd, msg, wParam, lParam);

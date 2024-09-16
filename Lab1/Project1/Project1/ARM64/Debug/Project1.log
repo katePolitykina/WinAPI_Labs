@@ -1,4 +1,9 @@
 ﻿  main.cpp
-\\mac\Home\Documents\SystemsProgramming\Lab1\Project1\main.cpp(48,13): warning C4244: инициализация: преобразование "double" в "float", возможна потеря данных
-\\mac\Home\Documents\SystemsProgramming\Lab1\Project1\main.cpp(49,13): warning C4244: инициализация: преобразование "double" в "float", возможна потеря данных
+\\mac\Home\Documents\SystemsProgramming\Lab1\Project1\main.cpp(50,41): warning C4244: аргумент: преобразование "double" в "Gdiplus::REAL", возможна потеря данных
+\\mac\Home\Documents\SystemsProgramming\Lab1\Project1\main.cpp(79,13): warning C4244: инициализация: преобразование "double" в "float", возможна потеря данных
+\\mac\Home\Documents\SystemsProgramming\Lab1\Project1\main.cpp(80,13): warning C4244: инициализация: преобразование "double" в "float", возможна потеря данных
+\\mac\Home\Documents\SystemsProgramming\Lab1\Project1\main.cpp(269,17): warning C4244: инициализация: преобразование "double" в "float", возможна потеря данных
+\\mac\Home\Documents\SystemsProgramming\Lab1\Project1\main.cpp(270,17): warning C4244: инициализация: преобразование "double" в "float", возможна потеря данных
+\\mac\Home\Documents\SystemsProgramming\Lab1\Project1\main.cpp(353,42): warning C4244: аргумент: преобразование "float" в "int", возможна потеря данных
+\\mac\Home\Documents\SystemsProgramming\Lab1\Project1\main.cpp(353,33): warning C4244: аргумент: преобразование "float" в "int", возможна потеря данных
   Project1.vcxproj -> \\Mac\Home\Documents\SystemsProgramming\Lab1\Project1\ARM64\Debug\Project1.exe
